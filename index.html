@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Visor territorial de información cultural del Perú.">
+  <title>Geoportal Cultural del Perú</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Inicio Geoportal Cultural">
+      <span class="brand-mark">GC</span>
+      <span class="brand-copy">
+        <strong>Geoportal Cultural del Perú</strong>
+        <small>Información territorial y cultural</small>
+      </span>
+    </a>
+    <div class="topbar-right">
+      <span class="status-dot"></span>
+      <span>VISOR DEMOSTRATIVO</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="intro">
+        <span class="eyebrow">EXPLORADOR GEOGRÁFICO</span>
+        <h1>Explorar información</h1>
+        <p>Consulta el mapa y utiliza los controles para explorar el territorio peruano.</p>
+      </div>
+
+      <div class="search-box">
+        <label for="searchInput">Buscar lugar o elemento</label>
+        <div class="search-row">
+          <input id="searchInput" type="search" placeholder="Ej. Cusco, Lima..." autocomplete="off">
+          <button id="searchButton" class="search-button" aria-label="Buscar">⌕</button>
+        </div>
+        <p class="helper">La búsqueda inicial permite ubicar departamentos y ciudades de referencia.</p>
+      </div>
+
+      <section class="layer-section">
+        <div class="section-heading">
+          <h2>Capas del mapa</h2>
+          <span class="count">03</span>
+        </div>
+        <label class="layer-option">
+          <span class="layer-symbol territory"></span>
+          <span class="layer-text"><strong>Departamentos</strong><small>Capa territorial de referencia</small></span>
+          <input id="layerDepartments" type="checkbox" checked>
+        </label>
+        <label class="layer-option">
+          <span class="layer-symbol infrastructure"></span>
+          <span class="layer-text"><strong>Infraestructura cultural</strong><small>Puntos demostrativos</small></span>
+          <input id="layerCulture" type="checkbox" checked>
+        </label>
+        <label class="layer-option">
+          <span class="layer-symbol places"></span>
+          <span class="layer-text"><strong>Lugares de referencia</strong><small>Ciudades seleccionadas</small></span>
+          <input id="layerCities" type="checkbox" checked>
+        </label>
+      </section>
+
+      <section class="legend-card">
+        <h2>Leyenda</h2>
+        <div class="legend-row"><span class="legend-dot culture-dot"></span> Punto cultural demostrativo</div>
+        <div class="legend-row"><span class="legend-dot city-dot"></span> Ciudad de referencia</div>
+        <div class="legend-row"><span class="legend-line"></span> Límites territoriales (base cartográfica)</div>
+      </section>
+
+      <div class="notice">
+        <strong>Versión inicial</strong>
+        <p>Este visor es una demostración pública. Los puntos no representan un inventario oficial. Las capas de QGIS y los datos validados se incorporarán en una siguiente etapa.</p>
+      </div>
+      <div id="statusMessage" class="status-message" role="status">Mapa listo.</div>
+    </aside>
+
+    <section class="map-panel" aria-label="Mapa interactivo">
+      <div class="map-toolbar">
+        <div>
+          <span class="map-kicker">VISUALIZACIÓN TERRITORIAL</span>
+          <h2>Mapa del Perú</h2>
+        </div>
+        <div class="toolbar-actions">
+          <button id="homeButton" class="secondary-button">Vista inicial</button>
+          <button id="locateButton" class="secondary-button">Mi ubicación</button>
+        </div>
+      </div>
+      <div id="map" aria-label="Mapa interactivo del Perú"></div>
+      <div class="map-footer">
+        <span>Mapa base © OpenStreetMap</span>
+        <span id="coordinateReadout">Mueve el cursor sobre el mapa</span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Geoportal Cultural del Perú</span>
+    <span>Prototipo web · Preparado para futuras capas geográficas</span>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>
