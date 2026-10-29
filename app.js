@@ -137,16 +137,39 @@ function rowProvince(r) { return norm(r.PROVINCIA); }
 function rowDistrict(r) { return norm(r.DISTRITO); }
 function rowUbigeo(r) { return clean(r.UBIGEO).replace(/\D/g, "").padStart(6, "0").slice(-6); }
 
-function aggregateRentoca(level) {
+function filteredRentocaRows() {
+  const dept = norm($("departmentFilter").value);
+  const prov = norm($("provinceFilter").value);
+  const dist = norm($("districtFilter").value);
+
+  return rentocaRows.filter(r =>
+    (!dept || rowDepartment(r) === dept) &&
+    (!prov || rowProvince(r) === prov) &&
+    (!dist || rowDistrict(r) === dist)
+  );
+}
+
+function aggregateRentoca(level, rows = rentocaRows) {
   const totals = new Map();
-  rentocaRows.forEach(r => {
+
+  rows.forEach(r => {
     const qty = numberOf(r.Cantidad);
     let key = "";
-    if (level === "districts") key = rowUbigeo(r) || `${rowDepartment(r)}|${rowProvince(r)}|${rowDistrict(r)}`;
-    else if (level === "provinces") key = `${rowDepartment(r)}|${rowProvince(r)}`;
-    else key = rowDepartment(r);
-    if (key) totals.set(key, (totals.get(key) || 0) + qty);
+
+    if (level === "districts") {
+      key = rowUbigeo(r) ||
+        `${rowDepartment(r)}|${rowProvince(r)}|${rowDistrict(r)}`;
+    } else if (level === "provinces") {
+      key = `${rowDepartment(r)}|${rowProvince(r)}`;
+    } else {
+      key = rowDepartment(r);
+    }
+
+    if (key) {
+      totals.set(key, (totals.get(key) || 0) + qty);
+    }
   });
+
   return totals;
 }
 function featureRentocaKey(feature, level) {
