@@ -181,50 +181,144 @@ function updateLegend(values) {
 }
 async function renderRentocaLayer() {
   const enabled = $("layerRentoca").checked;
-  if (rentocaLayer && map.hasLayer(rentocaLayer)) map.removeLayer(rentocaLayer);
+
+  if (rentocaLayer && map.hasLayer(rentocaLayer)) {
+    map.removeLayer(rentocaLayer);
+  }
+
   rentocaLayer = null;
+
   if (!enabled) return;
+
   const level = $("rentocaLevel").value;
+
   status(`Preparando degradado RENTOCA por ${territory[level].name.toLowerCase()}...`);
-  const data = await loadTerritory(level);
-  const totals = aggregateRentoca(level);
-  const values = [];
-  const records = data.features.map(feature => {
-    const key = featureRentocaKey(feature, level);
-    const value = totals.get(key) || 0;
-    values.push(value);
-    return { feature, key, value };
-  });
-  const max = Math.max(0, ...values);
-  updateLegend(values);
-  rentocaLayer = L.geoJSON(data, {
-    style: feature => {
-      const value = totals.get(featureRentocaKey(feature, level)) || 0;
-      return {
-        color: "#6b244d",
-        weight: level === "departments" ? 1.2 : level === "provinces" ? 0.65 : 0.4,
-        fillColor: shadeFor(value, max),
-        fillOpacity: value > 0 ? 0.83 : 0.28
-      };
-    },
-    onEachFeature: (feature, layer) => {
-      const p = feature.properties || {};
-      const d = firstProp(p, ["NOMBDEP","DEPARTAMENTO","Departamento"]) || getDept(p);
-      const pr = firstProp(p, ["NOMBPROV","PROVINCIA","Provincia"]) || getProv(p);
-      const di = firstProp(p, ["NOMBDIST","DISTRITO","Distrito"]) || getDist(p);
-      const value = totals.get(featureRentocaKey(feature, level)) || 0;
-      let title = d;
-      if (level === "provinces") title = `${pr}, ${d}`;
-      if (level === "districts") title = `${di}, ${pr}, ${d}`;
-      layer.bindPopup(`<div class="popup-title">${esc(title || territory[level].name)}</div>
-        <div><b>Agentes culturales inscritos en RENTOCA:</b> ${fmt(value)}</div>
-        ${level === "districts" ? `<div><b>UBIGEO:</b> ${esc(getUbigeo(p) || "No disponible")}</div>` : ""}`);
-      layer.bindTooltip(`${esc(title || "Territorio")}: ${fmt(value)} agentes`, { sticky: true });
-    }
-  }).addTo(map);
-  $("rentocaMetric").textContent = fmt(totalFilteredRentoca());
-  status(`Degradado RENTOCA cargado por ${territory[level].name.toLowerCase()}.`);
-  applyTerritorialFilters();
+
+  loadTerritory(level)
+    .then(data => {
+      const selectedRows = filteredRentocaRows();
+      const totals = aggregateRentoca(level, selectedRows);
+
+      const deptSelected = norm($("departmentFilter").value);
+      const provSelected = norm($("provinceFilter").value);
+      const distSelected = norm($("districtFilter").value);
+
+      // Determina si el polígono pertenece al territorio seleccionado.
+      function isInSelectedTerritory(feature) {
+        const p = feature.properties || {};
+        const dept = getDept(p);
+        const prov = getProv(p);
+        const dist = getDist(p);
+
+        if (deptSelected && dept && dept !== deptSelected) return false;
+        if (provSelected && prov && prov !== provSelected) return false;
+        if (distSelected && dist && dist !== distSelected) return false;
+
+        // Si el GeoJSON no tiene atributos suficientes para validar
+        // el filtro, no se descarta automáticamente por ese motivo.
+        return true;
+      }
+
+      const visibleValues = [];
+
+      data.features.forEach(feature => {
+        if (!isInSelectedTerritory(feature)) return;
+
+        const value = totals.get(featureRentocaKey(feature, level)) || 0;
+
+        if (value > 0) visibleValues.push(value);
+      });
+
+      const maxValue = Math.max(0, ...visibleValues);
+      updateLegend(visibleValues);
+
+      const hasFilter = Boolean(
+        deptSelected || provSelected || distSelected
+      );
+
+      rentocaLayer = L.geoJSON(data, {
+        style: feature => {
+          const inside = isInSelectedTerritory(feature);
+          const value = inside
+            ? (totals.get(featureRentocaKey(feature, level)) || 0)
+            : 0;
+
+          const hasValue = inside && value > 0;
+
+          return {
+            color: hasValue ? "#6b244d" : "#d6cfd4",
+            weight: level === "departments" ? 1.2
+              : level === "provinces" ? 0.65
+              : 0.4,
+
+            // Solo los territorios incluidos en el filtro reciben degradado.
+            fillColor: hasValue
+              ? shadeFor(value, maxValue)
+              : "#eee9ed",
+
+            fillOpacity: hasValue
+              ? 0.86
+              : (hasFilter ? 0.10 : 0.24),
+
+            opacity: hasValue ? 0.9 : 0.55
+          };
+        },
+
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties || {};
+
+          const dept = firstProp(
+            p, ["NOMBDEP", "DEPARTAMENTO", "Departamento"]
+          ) || getDept(p);
+
+          const prov = firstProp(
+            p, ["NOMBPROV", "PROVINCIA", "Provincia"]
+          ) || getProv(p);
+
+          const dist = firstProp(
+            p, ["NOMBDIST", "DISTRITO", "Distrito"]
+          ) || getDist(p);
+
+          const inside = isInSelectedTerritory(feature);
+          const value = inside
+            ? (totals.get(featureRentocaKey(feature, level)) || 0)
+            : 0;
+
+          let title = dept;
+
+          if (level === "provinces") title = `${prov}, ${dept}`;
+          if (level === "districts") title = `${dist}, ${prov}, ${dept}`;
+
+          layer.bindPopup(`
+            <div class="popup-title">${esc(title || territory[level].name)}</div>
+            <div><b>Agentes culturales inscritos en RENTOCA:</b> ${fmt(value)}</div>
+            ${level === "districts"
+              ? `<div><b>UBIGEO:</b> ${esc(getUbigeo(p) || "No disponible")}</div>`
+              : ""}
+            ${!inside
+              ? "<div>Fuera del ámbito territorial seleccionado.</div>"
+              : ""}
+          `);
+
+          layer.bindTooltip(
+            `${esc(title || "Territorio")}: ${fmt(value)} agentes`,
+            { sticky: true }
+          );
+        }
+      }).addTo(map);
+
+      $("rentocaMetric").textContent = fmt(totalFilteredRentoca());
+
+      status(
+        `Degradado RENTOCA cargado por ${territory[level].name.toLowerCase()}.`
+      );
+
+      applyTerritorialFilters();
+    })
+    .catch(error => {
+      console.error(error);
+      status(`No se pudo cargar el degradado RENTOCA: ${error.message}`);
+    });
 }
 function totalFilteredRentoca() {
   const dept = norm($("departmentFilter").value);
@@ -307,53 +401,165 @@ function infraPopup(row) {
   return `<div class="territory-popup">${fields.filter(([label,key]) => propValue(row,key))
     .map(([label,key]) => `<div><strong>${esc(label)}:</strong> ${esc(propValue(row,key))}</div>`).join("")}</div>`;
 }
-function renderInfrastructure() {
-  const type = $("typeFilter").value, func = $("functionFilter").value;
-  activeInfra = infrastructure.filter(r =>
-    selectedTerritoryMatches(r) &&
-    (!type || infraType(r) === type) &&
-    (!func || infraFunction(r) === func)
+// Devuelve un icono según el tipo de infraestructura cultural.
+function infraIconForType(type) {
+  const t = norm(type);
+
+  const categories = [
+    { words: ["ANFITEATRO"], emoji: "🎭", color: "#8E245D" },
+    { words: ["TEATRO", "TEATRIN"], emoji: "🎭", color: "#8E245D" },
+    { words: ["CENTRO CULTURAL"], emoji: "🏛️", color: "#245A8D" },
+    { words: ["AUDITORIO"], emoji: "🎤", color: "#7650A6" },
+    { words: ["CINE"], emoji: "🎬", color: "#C36A1B" },
+    { words: ["BIBLIOTECA", "LIBRERIA"], emoji: "📚", color: "#287C68" },
+    { words: ["ARCHIVO"], emoji: "🗂️", color: "#65758B" },
+    { words: ["MUSEO"], emoji: "🏺", color: "#A35C32" },
+    { words: ["GALERIA", "SALA DE EXPOSICION"], emoji: "🖼️", color: "#A13D77" },
+    { words: ["CASA DE LA CULTURA"], emoji: "🏠", color: "#3E7D52" },
+    { words: ["ESPACIO PUBLICO"], emoji: "🌳", color: "#4D8247" }
+  ];
+
+  const match = categories.find(category =>
+    category.words.some(word => t.includes(word))
   );
+
+  return match || {
+    emoji: "📍",
+    color: "#A30262"
+  };
+}
+
+// Construye un marcador visual con el icono de la categoría.
+function createInfrastructureMarker(row, lat, lon) {
+  const category = infraIconForType(infraType(row));
+
+  const icon = L.divIcon({
+    className: "infra-map-icon-wrapper",
+    html: `
+      <span
+        class="infra-map-icon"
+        style="--infra-icon-color:${category.color}"
+        title="${esc(infraType(row) || "Infraestructura cultural")}"
+      >${category.emoji}</span>
+    `,
+    iconSize: [34, 38],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -32]
+  });
+
+  return L.marker([lat, lon], {
+    icon,
+    keyboard: true,
+    title: infraName(row) || infraType(row) || "Infraestructura cultural"
+  });
+}
+
+function renderInfrastructure() {
+  const type = $("typeFilter").value;
+  const func = $("functionFilter").value;
+
+  // Los filtros territoriales se aplican a la infraestructura,
+  // independientemente de que se muestre o no su capa en el mapa.
+  activeInfra = infrastructure.filter(row =>
+    selectedTerritoryMatches(row) &&
+    (!type || infraType(row) === type) &&
+    (!func || infraFunction(row) === func)
+  );
+
   infrastructureLayer.clearLayers();
+
   if ($("layerCulture").checked) {
     activeInfra.forEach(row => {
-      const lat = infraLat(row), lon = infraLon(row);
-      if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
-      const marker = L.circleMarker([lat, lon], {
-        radius: 6, color: "#ffffff", weight: 1.2,
-        fillColor: "#A30262", fillOpacity: 0.92
-      });
+      const lat = infraLat(row);
+      const lon = infraLon(row);
+
+      if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lon) ||
+        Math.abs(lat) > 90 ||
+        Math.abs(lon) > 180
+      ) {
+        return;
+      }
+
+      const marker = createInfrastructureMarker(row, lat, lon);
+
       marker.bindPopup(infraPopup(row), { maxWidth: 360 });
-      marker.bindTooltip(esc(infraName(row) || "Infraestructura cultural"));
+      marker.bindTooltip(
+        `${esc(infraName(row) || "Infraestructura cultural")} · ${esc(infraType(row) || "Tipo no especificado")}`,
+        { direction: "top", offset: [0, -24] }
+      );
+
       infrastructureLayer.addLayer(marker);
     });
   }
+
+  // Actualizar indicadores y tabla con los mismos filtros.
   $("infraMetric").textContent = fmt(activeInfra.length);
-  $("resultsSummary").textContent = `${fmt(activeInfra.length)} registros coinciden con los filtros seleccionados. Se muestran hasta 300 filas en la tabla.`;
+
+  $("resultsSummary").textContent =
+    `${fmt(activeInfra.length)} registros coinciden con los filtros seleccionados. ` +
+    "Se muestran hasta 300 filas en la tabla.";
+
   const tbody = $("infraTable").querySelector("tbody");
   tbody.innerHTML = "";
-  activeInfra.slice(0,300).forEach(r => {
+
+  activeInfra.slice(0, 300).forEach(row => {
     const tr = document.createElement("tr");
+
     const values = [
-      r["ID-INFRAESTRUCTURA"], r["Nombre de la infraestructura"], infraType(r),
-      r.Departamento, r.Provincia, r.Distrito, infraFunction(r)
+      row["ID-INFRAESTRUCTURA"],
+      row["Nombre de la infraestructura"],
+      infraType(row),
+      row.Departamento,
+      row.Provincia,
+      row.Distrito,
+      infraFunction(row)
     ];
-    values.forEach(v => { const td = document.createElement("td"); td.textContent = clean(v); tr.appendChild(td); });
+
+    values.forEach(value => {
+      const td = document.createElement("td");
+      td.textContent = clean(value);
+      tr.appendChild(td);
+    });
+
     tr.style.cursor = "pointer";
     tr.title = "Haz clic para ubicar la infraestructura en el mapa";
+
     tr.addEventListener("click", () => {
-      const lat = infraLat(r), lon = infraLon(r);
-      if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat)<=90 && Math.abs(lon)<=180) {
-        map.setView([lat,lon], 15);
-        infrastructureLayer.eachLayer(m => {
-          const ll = m.getLatLng();
-          if (Math.abs(ll.lat-lat)<1e-7 && Math.abs(ll.lng-lon)<1e-7) m.openPopup();
+      const lat = infraLat(row);
+      const lon = infraLon(row);
+
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lon) &&
+        Math.abs(lat) <= 90 &&
+        Math.abs(lon) <= 180
+      ) {
+        map.setView([lat, lon], 15);
+
+        infrastructureLayer.eachLayer(marker => {
+          const ll = marker.getLatLng();
+
+          if (
+            Math.abs(ll.lat - lat) < 1e-7 &&
+            Math.abs(ll.lng - lon) < 1e-7
+          ) {
+            marker.openPopup();
+          }
         });
-      } else status("Este registro no tiene coordenadas geográficas válidas.");
+      } else {
+        status("Este registro no tiene coordenadas geográficas válidas.");
+      }
     });
+
     tbody.appendChild(tr);
   });
-  if (!activeInfra.length) tbody.innerHTML = '<tr><td colspan="7">No hay registros que coincidan con los filtros.</td></tr>';
+
+  if (!activeInfra.length) {
+    tbody.innerHTML =
+      '<tr><td colspan="7">No hay registros que coincidan con los filtros.</td></tr>';
+  }
 }
 function applyTerritorialFilters() {
   const d = norm($("departmentFilter").value), p = norm($("provinceFilter").value), di = norm($("districtFilter").value);
